@@ -9,6 +9,7 @@ class GaussianNB:
         self.fitted = False
 
     def fit(self, X, y):
+        X, y = np.array(X), np.array(y)
         self.classes = np.unique(y)
         num_classes, num_feautures = len(self.classes), X.shape[1]
 
@@ -19,32 +20,43 @@ class GaussianNB:
         for i, class_ in enumerate(self.classes):
             Xk = X[y == class_]
             self.means[i] = Xk.mean(axis=0)
-            self.variances[i] = Xk.var(axis=0)
+            self.variances[i] = Xk.var(axis=0, ddof=1)
 
             self.priors[i] = Xk.shape[0] / X.shape[0]
 
         self.fitted = True
 
-    def log_gaussian(self, X: np.array):
-        num = -0.5 * (X[:, None, :] - self.means) ** 2 / self.variances
-        pi = -0.5 * np.log(2 * np.pi * self.variances)
-        log_prob = pi + num
-        log_prob_sum = log_prob.sum(axis=2)
+    def log_gaussian(
+        self,
+        X: np.array,
+        prior: np.array,
+        means: np.array,
+        variances: np.array,
+    ):
+        normalized_log = -0.5 * np.log(2 * np.pi * variances)
+        normalized_diff = (X - means) ** 2 / (2 * variances)
+        log_likelihood = np.sum(normalized_log - normalized_diff, axis=1)
+        log_likelihood = prior + log_likelihood
 
-        return log_prob_sum
+        return log_likelihood
 
-    def predict(self, X: np.array):
+    def predict(self, X):
         if self.fitted is False:
-            raise ValueError("Method should be fitted first.")
+            raise ValueError("You should fit before predict.")
 
-        log_prior = np.log(self.priors)
-        log_likelihood = self.log_gaussian(X)
+        n_samples = X.shape[0]
+        n_classes = len(self.classes)
+        log_probs = np.zeros((n_samples, n_classes))
 
-        probs = log_prior + log_likelihood
-        argmax = np.argmax(probs, axis=1)
-        result = self.classes[argmax]
+        for i in range(n_classes):
+            prior = self.priors[i]
+            means = self.means[i]
+            variances = self.variances[i]
 
-        return result
+            log_likelihood = self.log_gaussian(X, prior, means, variances)
+            log_probs[:, i] = prior + log_likelihood
+
+        return self.classes[np.argmax(log_probs, axis=1)]
 
 
 def main():
